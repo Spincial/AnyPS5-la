@@ -46,27 +46,26 @@ jobs:
       - run: ctest --test-dir build/register-context --output-on-failure --repeat until-fail:3 --no-tests=error
 
   linux:
-    runs-on: [self-hosted, linux, x64, anyps5]
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
-      CCACHE_DIR: /var/cache/anyps5/ccache
-      CCACHE_MAXSIZE: 30G
       CCACHE_COMPILERCHECK: content
-      MESA_SHADER_CACHE_DIR: /var/cache/anyps5/mesa
-      MESA_SHADER_CACHE_MAX_SIZE: 4G
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
           submodules: recursive
-      - name: Prepare persistent caches
+      - name: Install Vulkan software driver
         run: |
-          mkdir -p "$CCACHE_DIR" "$MESA_SHADER_CACHE_DIR"
-          test -w "$CCACHE_DIR" && test -w "$MESA_SHADER_CACHE_DIR"
-          ccache --zero-stats
-          ccache --show-config
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers libvulkan1
           dpkg-query -W mesa-vulkan-drivers
           grep -m1 '^model name' /proc/cpuinfo
+      - uses: hendrikmuhs/ccache-action@v1.2.24
+        with:
+          key: linux
+          max-size: 5G
+      - run: ccache --zero-stats && ccache --show-config
       - name: Install the wild linker
         shell: bash
         env:
@@ -103,7 +102,7 @@ jobs:
           slots=$(( slots < 1 ? 1 : slots ))
           tests=$(( cpus - busy ))
           tests=$(( tests < 1 ? 1 : tests ))
-          slot_dir=$CCACHE_DIR/compile-slots
+          slot_dir=$RUNNER_TEMP/compile-slots
           mkdir -p -m 1777 "$slot_dir"
           test -w "$slot_dir"
           echo "cpus=$cpus load=$busy mem_total_mb=$mem_mb -> build jobs $cpus, cold compiles $slots per host, tests $tests"
